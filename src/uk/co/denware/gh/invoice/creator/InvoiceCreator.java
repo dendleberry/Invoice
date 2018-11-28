@@ -3,6 +3,7 @@ package uk.co.denware.gh.invoice.creator;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -23,6 +24,7 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 
 import uk.co.denware.gh.invoice.Invoice;
 import uk.co.denware.gh.invoice.JobDetail;
+import uk.co.denware.gh.invoice.PartDetail;
 import uk.co.denware.gh.invoice.exceptions.ImageCreationException;
 
 public class InvoiceCreator {
@@ -71,7 +73,7 @@ public class InvoiceCreator {
 				addSectionBoundary(contents);
 				addJobDetails(contents);
 				addSectionBoundary(contents);
-
+				addPartDetails(contents);
 				contents.close();
 			}
 
@@ -89,6 +91,7 @@ public class InvoiceCreator {
 		}
 	}
 	
+
 	private void setPageCentres() {
 		centerX = pageSize.getWidth() / 2;
 		centerY = pageSize.getHeight() / 2;
@@ -240,44 +243,6 @@ public class InvoiceCreator {
 		updateCursorY(endY);
 	}
 	
-	private void addSectionBoundary(PDPageContentStream cs) throws IOException {
-		float boundaryPadding = getPxFromMm(invoice.getLayout().getSectionBoundaryPadding());
-		float y = (cursorY + lineHeight) - boundaryPadding;
-		cs.moveTo(cursorX, y);
-		cs.lineTo(maxX, y);
-		cs.stroke();
-		updateCursorY(y - lineHeight - boundaryPadding);
-	}
-	
-	private void addJobDetails(PDPageContentStream cs) throws IOException {
-		logger.traceEntry("addJobDetails({})", cs);
-		InvoiceItem jobDetails = new InvoiceItem(getFont("Helvetica","none"), 12);
-		Map<Integer,JobDetail> sortedMap = new TreeMap<>(invoice.getJobDetails());
-		List<JobDetail> list = new ArrayList<>(sortedMap.values());
-		logger.trace("Job Details list size is {}, first title = {} value = {}", list.size(), list.get(0).getTitle(), list.get(0).getValue());
-		
-		List<String> titles = new ArrayList<>();
-		List<String> values = new ArrayList<>();
-		for( JobDetail jd : list ) {
-			titles.add(jd.getTitle());
-			values.add(jd.getValue());
-		}
-		
-		float x = cursorX;
-		float y = cursorY;
-		
-		jobDetails.setMessage(titles);
-		jobDetails.setStartX(x);
-		jobDetails.setStartY(y);
-		addInvoiceItem(cs, jobDetails);
-		
-		x = x + jobDetails.getMaxWidth() + getPxFromMm(5f);
-		
-		jobDetails.setMessage(values);
-		jobDetails.setStartX(x);
-		addInvoiceItem(cs, jobDetails);
-	}
-	
 	private void addLogo(PDImageXObject img, PDPageContentStream cs) throws IOException, IllegalStateException {
 		logger.traceEntry("addLogo({}, {})", img, cs);
 		float imgHeight = getImageHeight(img);
@@ -321,4 +286,128 @@ public class InvoiceCreator {
 		
 		addInvoiceItem(cs, businessAddress);
 	}
+	
+	private void addSectionBoundary(PDPageContentStream cs) throws IOException {
+		float boundaryPadding = getPxFromMm(invoice.getLayout().getSectionBoundaryPadding());
+		float y = (cursorY + lineHeight) - boundaryPadding;
+		cs.moveTo(cursorX, y);
+		cs.lineTo(maxX, y);
+		cs.stroke();
+		updateCursorY(y - lineHeight - boundaryPadding);
+	}
+	
+	private void addJobDetails(PDPageContentStream cs) throws IOException {
+		logger.traceEntry("addJobDetails({})", cs);
+		InvoiceItem jobDetails = new InvoiceItem(getFont("Helvetica","none"), 12);
+		Map<Integer,JobDetail> sortedMap = new TreeMap<>(invoice.getJobDetails());
+		List<JobDetail> list = new ArrayList<>(sortedMap.values());
+		
+		List<String> titles = new ArrayList<>();
+		List<String> values = new ArrayList<>();
+		for( JobDetail jd : list ) {
+			titles.add(jd.getTitle());
+			values.add(jd.getValue());
+		}
+		
+		float x = cursorX;
+		float y = cursorY;
+		
+		jobDetails.setMessage(titles);
+		jobDetails.setStartX(x);
+		jobDetails.setStartY(y);
+		addInvoiceItem(cs, jobDetails);
+		
+		x = x + jobDetails.getMaxWidth() + getPxFromMm(5f);
+		
+		jobDetails.setMessage(values);
+		jobDetails.setStartX(x);
+		addInvoiceItem(cs, jobDetails);
+	}
+	
+	private void addPartDetails(PDPageContentStream cs) throws IOException {
+		logger.traceEntry("addPartDetails({})", cs);
+		InvoiceItem partDetails = new InvoiceItem(getFont("Helvetica","none"), 12);
+		Map<Integer,PartDetail> sortedMap = new TreeMap<>(invoice.getInvoiceItems());
+		List<PartDetail> list = new ArrayList<>(sortedMap.values());
+		
+		List<String> codes = new ArrayList<>();
+		List<String> descriptions = new ArrayList<>();
+		List<String> quantities = new ArrayList<>();
+		List<String> ppu = new ArrayList<>();
+		List<String> units = new ArrayList<>();
+		List<String> totals = new ArrayList<>();
+		
+		for( PartDetail pd : list ) {
+			if( pd.getCode() != null ) {
+				codes.add(pd.getCode());
+			} else {
+				codes.add("");
+			}
+			if( pd.getDescription() != null ) {
+				descriptions.add(pd.getDescription());
+			} else {
+				descriptions.add("");
+			}
+			quantities.add("" + pd.getQuantity());
+
+			if(  pd.getPencePerUnit() != null) {
+				ppu.add("" + (pd.getPencePerUnit() / 100 ));
+				totals.add( "" + BigDecimal.valueOf((pd.getPencePerUnit() / 100) * pd.getQuantity()) );
+			} else {
+				ppu.add("");
+				totals.add( "" + BigDecimal.valueOf(0) );
+			}
+			
+			if(  pd.getUnit() != null) {
+				units.add("" + pd.getUnit());
+			} else {
+				units.add("");
+			}
+			
+			
+			
+		}
+		
+		float x = cursorX;
+		float y = cursorY;
+		
+		partDetails.setMessage(codes);
+		partDetails.setStartX(x);
+		partDetails.setStartY(y);
+		addInvoiceItem(cs, partDetails);
+		
+		x = x + partDetails.getMaxWidth() + getPxFromMm(5f);
+		
+		partDetails.setMessage(descriptions);
+		partDetails.setStartX(x);
+		addInvoiceItem(cs, partDetails);
+		
+		x = x + partDetails.getMaxWidth() + getPxFromMm(5f);
+		
+		partDetails.setMessage(quantities);
+		partDetails.setStartX(x);
+		addInvoiceItem(cs, partDetails);
+		
+		x = x + partDetails.getMaxWidth() + getPxFromMm(5f);
+		
+		partDetails.setMessage(ppu);
+		partDetails.setStartX(x);
+		addInvoiceItem(cs, partDetails);
+		
+		x = x + partDetails.getMaxWidth() + getPxFromMm(5f);
+		
+		partDetails.setMessage(units);
+		partDetails.setStartX(x);
+		addInvoiceItem(cs, partDetails);
+		
+		x = x + partDetails.getMaxWidth() + getPxFromMm(5f);
+		
+		partDetails.setMessage(totals);
+		partDetails.setStartX(x);
+		addInvoiceItem(cs, partDetails);
+	}
+	
+
+	
+	
 }
